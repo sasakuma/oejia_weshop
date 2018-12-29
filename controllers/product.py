@@ -87,20 +87,25 @@ class WxappProduct(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.message)
+            return self.res_err(-1, e.name)
 
 
     @http.route('/<string:sub_domain>/shop/goods/detail', auth='public', methods=['GET'])
-    def detail(self, sub_domain, id=False, **kwargs):
+    def detail(self, sub_domain, id=False, code=False, **kwargs):
         goods_id = id
         try:
             ret, entry = self._check_domain(sub_domain)
             if ret:return ret
 
-            if not goods_id:
+            if not goods_id and not code:
                 return self.res_err(300)
 
-            goods = request.env['product.template'].sudo().browse(int(goods_id))
+            if goods_id:
+                product = None
+                goods = request.env['product.template'].sudo().browse(int(goods_id))
+            else:
+                product = request.env['product.product'].sudo().search([('barcode', '=', code)])
+                goods = product.product_tmpl_id
 
             if not goods:
                 return self.res_err(404)
@@ -118,17 +123,16 @@ class WxappProduct(http.Controller, BaseController):
                 },
                 "msg": "success"
             }
-            self.product_info_ext(data, goods)
+            self.product_info_ext(data, goods, product)
 
-            _logger.info(str(data))
             goods.sudo().write({'views': goods.views + 1})
             return self.res_ok(data['data'])
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.message)
+            return self.res_err(-1, e.name)
 
-    def product_info_ext(self, data, goods):
+    def product_info_ext(self, data, goods, product):
         data["data"]["logistics"] = {
                 "logisticsBySelf": False,
                 "isFree": False,
