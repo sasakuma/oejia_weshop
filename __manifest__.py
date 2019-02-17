@@ -17,6 +17,7 @@
 
         'views/parent_menus.xml',
 
+        'data/crm_team_datas.xml',
         'views/oe_shipper_views.xml',
         'views/oe_province_views.xml',
         'views/oe_city_views.xml',
@@ -32,8 +33,8 @@
         'views/product_template_views.xml',
         'views/sale_order_views.xml',
 
-        'data/crm_team_datas.xml',
         'data/wxapp_config_datas.xml',
+        'data/product_product_datas.xml',
 
     ],
     'demo': [

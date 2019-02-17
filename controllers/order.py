@@ -63,11 +63,18 @@ class WxappOrder(http.Controller, BaseController):
                 for each_goods in goods_list:
                     each_goods['order_id'] = order.id
                     request.env(user=1)['sale.order.line'].create(each_goods)
+                if logistics_price>0:
+                    request.env(user=1)['sale.order.line'].create({
+                        'order_id': order.id,
+                        'product_id': request.env.ref('oejia_weshop.product_product_delivery_weshop').id,
+                        'price_unit': logistics_price,
+                        'product_uom_qty': 1,
+                    })
 
                 #mail_template = request.env.ref('wechat_mall_order_create')
                 #mail_template.sudo().send_mail(order.id, force_send=True, raise_exception=False)
                 _data = {
-                    "amountReal": order.total,
+                    "amountReal": order.amount_total,
                     "dateAdd": order.create_date,
                     "id": order.id,
                     "orderNumber": order.name,
@@ -214,10 +221,10 @@ class WxappOrder(http.Controller, BaseController):
                 orders = request.env['sale.order'].search([
                     ('partner_id', '=', wechat_user.partner_id)
                 ])
-
+            delivery_product_id = request.env.ref('oejia_weshop.product_product_delivery_weshop').id
             data = {
                 "orderList": [{
-                    "amountReal": each_order.total,
+                    "amountReal": each_order.amount_total,
                     "dateAdd": each_order.create_date,
                     "id": each_order.id,
                     "orderNumber": each_order.name,
@@ -228,7 +235,7 @@ class WxappOrder(http.Controller, BaseController):
                     each_order.id: [
                         {
                             "pic": each_goods.product_id.product_tmpl_id.get_main_image(),
-                        } for each_goods in each_order.order_line]
+                        } for each_goods in each_order.order_line if each_goods.product_id.id!=delivery_product_id]
                     for each_order in orders}
             }
             return self.res_ok(data)
@@ -256,13 +263,14 @@ class WxappOrder(http.Controller, BaseController):
             if not order:
                 return self.res_err(404)
 
+            delivery_product_id = request.env.ref('oejia_weshop.product_product_delivery_weshop').id
             data = {
                 "code": 0,
                 "data": {
                     "orderInfo": {
-                        "amount": order.amount_total,
+                        "amount": order.goods_price,
                         "amountLogistics": order.logistics_price,
-                        "amountReal": order.total,
+                        "amountReal": order.amount_total,
                         "dateAdd": order.create_date,
                         "dateUpdate": order.write_date,
                         "goodsNumber": order.number_goods,
@@ -285,7 +293,7 @@ class WxappOrder(http.Controller, BaseController):
                             "orderId": order.id,
                             "pic": each_goods.product_id.product_tmpl_id.get_main_image(),
                             "property": each_goods.product_id.get_property_str(),
-                        } for each_goods in order.order_line
+                        } for each_goods in order.order_line if each_goods.product_id.id!=delivery_product_id
                     ],
                     "logistics": {
                         "address": order.address,
@@ -334,7 +342,8 @@ class WxappOrder(http.Controller, BaseController):
             if not order:
                 return self.res_err(404)
 
-            order.write({'customer_status': 'closed', 'state': 'cancel'})
+            order.write({'customer_status': 'closed'})
+            order.action_cancel()
 
             #mail_template = request.env.ref('wechat_mall_order_closed')
             #mail_template.sudo().send_mail(order.id, force_send=True, raise_exception=False)
@@ -444,7 +453,8 @@ class WxappOrder(http.Controller, BaseController):
             if not order:
                 return self.res_err(404)
 
-            order.write({'customer_status': 'pending', 'state': 'sale'})
+            order.write({'customer_status': 'pending'})
+            order.action_confirm()
             return request.make_response(json.dumps({'code': 0, 'msg': 'success'}))
 
         except Exception as e:
