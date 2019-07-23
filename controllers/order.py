@@ -23,6 +23,9 @@ class WxappOrder(http.Controller, BaseController):
             res, wechat_user, entry = self._check_user(sub_domain, token)
             if res:return res
 
+            res = self.pre_check(entry, wechat_user, kwargs)
+            if res:return res
+
             # [{"goodsId":1,"number":3,"propertyChildIds":"1:1,2:4,","logisticsType":0, "inviter_id":0}]
             goods_json = json.loads(kwargs.pop('goodsJsonStr'))
             province_id = int(kwargs.pop('provinceId'))
@@ -37,6 +40,11 @@ class WxappOrder(http.Controller, BaseController):
                 goods_json, province_id, city_id, district_id, calculate
             )
 
+            address = request.env(user=1)['res.partner'].search([
+                ('parent_id', '=', wechat_user.partner_id.id),
+                ('type', '=', 'delivery'),
+                ('is_default', '=', True)
+            ], limit=1)
             order_dict = {
                 'zipcode': zipcode,
                 'partner_id': wechat_user.partner_id.id,
@@ -48,6 +56,8 @@ class WxappOrder(http.Controller, BaseController):
                 'team_id': entry.team_id.id,
                 'note': remark,
                 'linkman': link_man,
+                'partner_shipping_id': address and address.id or None,
+                'user_id': wechat_user.partner_id.user_id.id,
             }
             order_dict.update(kwargs)
             _logger.info('>>> order_dict %s', order_dict)
@@ -75,7 +85,7 @@ class WxappOrder(http.Controller, BaseController):
                 #mail_template = request.env.ref('wechat_mall_order_create')
                 #mail_template.sudo().send_mail(order.id, force_send=True, raise_exception=False)
                 _data = {
-                    "amountReal": order.amount_total,
+                    "amountReal": round(order.amount_total, 2),
                     "dateAdd": dt_convert(order.create_date),
                     "id": order.id,
                     "orderNumber": order.name,
@@ -87,7 +97,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
     def parse_goods_json(self, goods_json, province_id, city_id, district_id, calculate):
         """
@@ -173,6 +183,9 @@ class WxappOrder(http.Controller, BaseController):
     def calculate_logistics_fee(self, goods, amount, transport_type, province_id, city_id, district_id):
         return 0
 
+    def pre_check(self, entry, wechat_user, post_data):
+        return
+
 
     @http.route('/<string:sub_domain>/order/statistics', auth='public', method=['GET', 'POST'], csrf=False)
     def statistics(self, sub_domain, token=None, **kwargs):
@@ -205,7 +218,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
 
     @http.route('/<string:sub_domain>/order/list', auth='public', method=['GET', 'POST'], csrf=False)
@@ -218,16 +231,16 @@ class WxappOrder(http.Controller, BaseController):
                 orders = request.env['sale.order'].sudo().search([
                     ('partner_id', '=', wechat_user.partner_id.id),
                     ('customer_status', '=', defs.OrderRequestStatus.attrs[int(status)])
-                ])
+                ], limit=30)
             else:
                 orders = request.env['sale.order'].search([
                     ('partner_id', '=', wechat_user.partner_id)
-                ])
+                ], limit=30)
             delivery_product_id = request.env.ref('oejia_weshop.product_product_delivery_weshop').id
             data = {
                 "logisticsMap": {},
                 "orderList": [{
-                    "amountReal": each_order.amount_total,
+                    "amountReal": round(each_order.amount_total, 2),
                     "dateAdd": dt_convert(each_order.create_date),
                     "id": each_order.id,
                     "remark": each_order.note,
@@ -249,7 +262,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
 
     @http.route('/<string:sub_domain>/order/detail', auth='public', method=['GET'])
@@ -277,7 +290,7 @@ class WxappOrder(http.Controller, BaseController):
                     "orderInfo": {
                         "amount": order.goods_price,
                         "amountLogistics": order.logistics_price,
-                        "amountReal": order.amount_total,
+                        "amountReal": round(order.amount_total, 2),
                         "dateAdd": dt_convert(order.create_date),
                         "dateUpdate": dt_convert(order.write_date),
                         "goodsNumber": order.number_goods,
@@ -326,7 +339,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
     def build_traces(self, order, data):
         pass
@@ -362,7 +375,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
 
     @http.route('/<string:sub_domain>/order/delivery', auth='public', method=['GET', 'POST'], csrf=False)
@@ -395,7 +408,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
 
     @http.route('/<string:sub_domain>/order/reputation', auth='public', method=['GET'])
@@ -442,7 +455,7 @@ class WxappOrder(http.Controller, BaseController):
 
         except Exception as e:
             _logger.exception(e)
-            return self.res_err(-1, e.name)
+            return self.res_err(-1, str(e))
 
 
 
